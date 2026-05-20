@@ -23,6 +23,7 @@ builder.Services.AddScoped<HttpClient>(sp =>
         {
             BaseAddress = new Uri("https://RecetMancha.somee.com/")
             //BaseAddress = new Uri("https://localhost:XXXX/")
+            
         };
     }
 );
