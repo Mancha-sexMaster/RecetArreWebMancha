@@ -1,0 +1,31 @@
+name: Deploy Blazor WASM
+
+on:
+  push:
+    branches: [ master ]
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v3
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Publish
+        run: dotnet publish RecetArreWeb/RecetArreWeb.csproj -c Release -o publish
+
+      - name: Fix base href
+        run: sed -i 's|<base href="/" />|<base href="/RecetArreWeb/" />|g' publish/wwwroot/index.html
+
+      - name: Copy 404.html
+        run: cp publish/wwwroot/index.html publish/wwwroot/404.html
+
+      - name: Deploy to GitHub Pages
+        uses: peaceiris/actions-gh-pages@v3
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: publish/wwwroot

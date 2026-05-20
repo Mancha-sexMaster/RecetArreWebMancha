@@ -1,0 +1,536 @@
+﻿@page "/recetas/{Id:int}"
+@using System.Security.Claims
+@inject IRecetaService recetaService
+@inject IComentarioService comentarioService
+@inject ICategoriaService categoriaService
+@inject IIngredienteService ingredienteService
+@inject IRatingService ratingService
+@inject AuthenticationStateProvider authStateProvider
+@inject NavigationManager navigation
+@inject IJSRuntime JSRuntime
+
+<PageTitle>@(receta?.Titulo ?? "Receta")</PageTitle>
+
+<div class="container-fluid py-4">
+    @if (receta == null)
+    {
+        <div class="text-center py-5">
+            <div class="spinner-border text-brand" role="status"></div>
+            <p class="text-muted mt-3">Cargando receta...</p>
+        </div>
+    }
+    else
+    {
+        <div class="row mb-4">
+            <div class="col-12">
+                <button class="btn btn-outline-secondary btn-sm mb-3" @onclick="VolverARecetas">
+                    <span class="bi bi-arrow-left me-1"></span> Volver a Recetas
+                </button>
+            </div>
+        </div>
+
+        @if (!string.IsNullOrEmpty(mensajeExito))
+        {
+            <div class="alert alert-success alert-dismissible fade show">
+                @mensajeExito
+                <button type="button" class="btn-close" @onclick="() => mensajeExito = string.Empty"></button>
+            </div>
+        }
+        @if (!string.IsNullOrEmpty(mensajeError))
+        {
+            <div class="alert alert-danger alert-dismissible fade show">
+                @mensajeError
+                <button type="button" class="btn-close" @onclick="() => mensajeError = string.Empty"></button>
+            </div>
+        }
+
+        <div class="row">
+            <!-- Columna principal -->
+            <div class="col-12 col-lg-8">
+                <!-- Encabezado -->
+                <div class="card border-0 shadow-sm mb-4">
+                    <div class="card-body">
+                        <div class="d-flex justify-content-between align-items-start mb-3">
+                            <div>
+                                <h1 class="h3 text-brand mb-1">@receta.Titulo</h1>
+                                <div class="d-flex align-items-center gap-2 mb-2">
+                                    <div class="rating-display">
+                                        @for (var i = 1; i <= 5; i++)
+                                        {
+                                            var clipId = GetAverageStarClipId(i);
+                                            <svg class="rating-svg" viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
+                                                <defs>
+                                                    <clipPath id="@clipId">
+                                                        <rect width="@($"{GetAverageStarFillPercent(i)}%")" height="24" />
+                                                    </clipPath>
+                                                </defs>
+                                                <path fill="#d1d5db" d="M12 17.27L18.18 21 16.54 13.97 22 9.24 14.81 8.63 12 2 9.19 8.63 2 9.24 7.46 13.97 5.82 21z" />
+                                                <path fill="#f0ad4e" clip-path="url(#@clipId)" d="M12 17.27L18.18 21 16.54 13.97 22 9.24 14.81 8.63 12 2 9.19 8.63 2 9.24 7.46 13.97 5.82 21z" />
+                                            </svg>
+                                        }
+                                    </div>
+                                    <span class="text-muted small">@promedioRating.ToString("0.0")</span>
+                                </div>
+                                @if (receta.EstaPublicado)
+                                {
+                                    <span class="badge bg-success">Publicado</span>
+                                }
+                                else
+                                {
+                                    <span class="badge bg-secondary">Borrador</span>
+                                }
+                            </div>
+                            <AuthorizeView>
+                                <Authorized>
+                                    <div class="dropdown">
+                                        <button class="btn btn-sm btn-outline-secondary" data-bs-toggle="dropdown">
+                                            <span class="bi bi-three-dots-vertical"></span>
+                                        </button>
+                                        <ul class="dropdown-menu">
+                                            <li>
+                                                <button class="dropdown-item" @onclick="IrAEditar">
+                                                    <span class="bi bi-pencil me-2"></span>Editar
+                                                </button>
+                                            </li>
+                                            <li><hr class="dropdown-divider" /></li>
+                                            <li>
+                                                <button class="dropdown-item text-danger" @onclick="EliminarReceta">
+                                                    <span class="bi bi-trash me-2"></span>Eliminar
+                                                </button>
+                                            </li>
+                                        </ul>
+                                    </div>
+                                </Authorized>
+                            </AuthorizeView>
+                        </div>
+
+                        @if (!string.IsNullOrEmpty(receta.Descripcion))
+                        {
+                            <p class="text-muted">@receta.Descripcion</p>
+                        }
+
+                        <div class="d-flex gap-4 text-muted small">
+                            <span><span class="bi bi-clock me-1"></span>Prep: @receta.TiempoPreparacionMinutos min</span>
+                            <span><span class="bi bi-fire me-1"></span>Cocción: @receta.TiempoCoccionMinutos min</span>
+                            <span><span class="bi bi-people me-1"></span>@receta.Porciones porciones</span>
+                            <span><span class="bi bi-hourglass-split me-1"></span>Total: @(receta.TiempoPreparacionMinutos + receta.TiempoCoccionMinutos) min</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Instrucciones -->
+                <div class="card border-0 shadow-sm mb-4">
+                    <div class="card-header bg-white">
+                        <h5 class="mb-0"><span class="bi bi-list-ol me-2"></span>Instrucciones</h5>
+                    </div>
+                    <div class="card-body">
+                        <div style="white-space: pre-line;">@receta.Instrucciones</div>
+                    </div>
+                </div>
+
+                <!-- Comentarios -->
+                <div class="card border-0 shadow-sm mb-4">
+                    <div class="card-header bg-white d-flex justify-content-between align-items-center">
+                        <h5 class="mb-0"><span class="bi bi-chat-dots me-2"></span>Comentarios (@(comentarios?.Count ?? 0))</h5>
+                    </div>
+                    <div class="card-body">
+                        <AuthorizeView>
+                            <Authorized>
+                                <div class="mb-4">
+                                    <label class="form-label fw-semibold">Calificación</label>
+                                    <div class="d-flex align-items-center gap-1" @onmouseleave="ClearHoverRating">
+                                        @for (var i = 1; i <= 5; i++)
+                                        {
+                                            var starIndex = i;
+                                            <span class="rating-star"
+                                                  @onmousemove="(e) => SetHoverRating(starIndex, e)"
+                                                  @onclick="(e) => SetSelectedRating(starIndex, e)">
+                                                <span class="bi @GetStarIcon(starIndex) text-warning"></span>
+                                            </span>
+                                        }
+                                        <span class="ms-2 text-muted small">@CurrentRating.ToString("0.0")</span>
+                                    </div>
+                                    <button class="btn btn-brand mt-3" @onclick="EnviarCalificacion"
+                                            disabled="@(enviandoRating || selectedRating <= 0)">
+                                        @if (enviandoRating)
+                                        {
+                                            <span class="spinner-border spinner-border-sm"></span>
+                                        }
+                                        else
+                                        {
+                                            <span>Enviar calificación</span>
+                                        }
+                                    </button>
+                                </div>
+                            </Authorized>
+                        </AuthorizeView>
+                        <AuthorizeView>
+                            <Authorized>
+                                <div class="mb-4">
+                                    <div class="input-group">
+                                        <input type="text" class="form-control" placeholder="Escribe un comentario..."
+                                               @bind="nuevoComentario" @bind:event="oninput"
+                                               @onkeydown="HandleKeyDown" />
+                                        <button class="btn btn-brand" @onclick="CrearComentario"
+                                                disabled="@(string.IsNullOrWhiteSpace(nuevoComentario) || enviandoComentario)">
+                                            @if (enviandoComentario)
+                                            {
+                                                <span class="spinner-border spinner-border-sm"></span>
+                                            }
+                                            else
+                                            {
+                                                <span class="bi bi-send"></span>
+                                            }
+                                        </button>
+                                    </div>
+                                </div>
+                            </Authorized>
+                            <NotAuthorized>
+                                <div class="alert alert-light mb-4">
+                                    <a href="/login" class="link-brand">Inicia sesión</a> para comentar.
+                                </div>
+                            </NotAuthorized>
+                        </AuthorizeView>
+
+                        @if (comentarios == null)
+                        {
+                            <p class="text-muted text-center">Cargando comentarios...</p>
+                        }
+                        else if (!comentarios.Any())
+                        {
+                            <p class="text-muted text-center">No hay comentarios todavía. ¡Sé el primero!</p>
+                        }
+                        else
+                        {
+                            @foreach (var comentario in comentarios)
+                            {
+                                <div class="d-flex mb-3 pb-3 border-bottom">
+                                    <div class="flex-shrink-0">
+                                        <div class="bg-brand text-white rounded-circle d-flex align-items-center justify-content-center"
+                                             style="width: 36px; height: 36px; font-size: 0.8rem;">
+                                            <span class="bi bi-person"></span>
+                                        </div>
+                                    </div>
+                                    <div class="flex-grow-1 ms-3">
+                                        <div class="d-flex justify-content-between align-items-start">
+                                            <div>
+                                                <span class="fw-semibold small">@comentario.UsuarioId[..8]...</span>
+                                                <span class="text-muted small ms-2">@comentario.CreadoUtc.ToString("dd/MM/yyyy HH:mm")</span>
+                                            </div>
+                                            <AuthorizeView>
+                                                <Authorized>
+                                                    <button class="btn btn-sm btn-link text-danger p-0"
+                                                            @onclick="() => EliminarComentario(comentario.Id)">
+                                                        <span class="bi bi-x-lg small"></span>
+                                                    </button>
+                                                </Authorized>
+                                            </AuthorizeView>
+                                        </div>
+                                        <p class="mb-0 mt-1">@comentario.Contenido</p>
+                                    </div>
+                                </div>
+                            }
+                        }
+                    </div>
+                </div>
+            </div>
+
+            <!-- Sidebar -->
+            <div class="col-12 col-lg-4">
+                <!-- Categorías -->
+                <div class="card border-0 shadow-sm mb-4">
+                    <div class="card-header bg-white">
+                        <h5 class="mb-0"><span class="bi bi-tags me-2"></span>Categorías</h5>
+                    </div>
+                    <div class="card-body">
+                        @if (receta.CategoriaIds.Any() && categorias != null)
+                        {
+                            <div class="d-flex flex-wrap gap-2">
+                                @foreach (var catId in receta.CategoriaIds)
+                                {
+                                    var cat = categorias.FirstOrDefault(c => c.Id == catId);
+                                    if (cat != null)
+                                    {
+                                        <span class="badge bg-brand">@cat.Nombre</span>
+                                    }
+                                }
+                            </div>
+                        }
+                        else
+                        {
+                            <p class="text-muted mb-0">Sin categorías</p>
+                        }
+                    </div>
+                </div>
+
+                <!-- Ingredientes -->
+                <div class="card border-0 shadow-sm mb-4">
+                    <div class="card-header bg-white">
+                        <h5 class="mb-0"><span class="bi bi-basket me-2"></span>Ingredientes</h5>
+                    </div>
+                    <div class="card-body">
+                        @if (receta.IngredienteIds.Any() && ingredientes != null)
+                        {
+                            <ul class="list-group list-group-flush">
+                                @foreach (var ingId in receta.IngredienteIds)
+                                {
+                                    var ing = ingredientes.FirstOrDefault(i => i.Id == ingId);
+                                    if (ing != null)
+                                    {
+                                        <li class="list-group-item px-0">
+                                            <span class="bi bi-check2 text-brand me-2"></span>@ing.Nombre
+                                        </li>
+                                    }
+                                }
+                            </ul>
+                        }
+                        else
+                        {
+                            <p class="text-muted mb-0">Sin ingredientes</p>
+                        }
+                    </div>
+                </div>
+
+                <!-- Info -->
+                <div class="card border-0 shadow-sm mb-4">
+                    <div class="card-header bg-white">
+                        <h5 class="mb-0"><span class="bi bi-info-circle me-2"></span>Información</h5>
+                    </div>
+                    <div class="card-body">
+                        <ul class="list-unstyled mb-0">
+                            <li class="mb-2">
+                                <span class="text-muted small">Creado:</span><br />
+                                @receta.CreadoUtc.ToString("dd/MM/yyyy HH:mm")
+                            </li>
+                            <li class="mb-2">
+                                <span class="text-muted small">Modificado:</span><br />
+                                @receta.ModificadoUtc.ToString("dd/MM/yyyy HH:mm")
+                            </li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+        </div>
+    }
+</div>
+
+@code {
+    [Parameter] public int Id { get; set; }
+
+    private RecetaDto? receta;
+    private List<ComentarioDto>? comentarios;
+    private List<CategoriaDto>? categorias;
+    private List<IngredienteDto>? ingredientes;
+    private string nuevoComentario = "";
+    private bool enviandoComentario = false;
+    private bool enviandoRating = false;
+    private string mensajeExito = string.Empty;
+    private string mensajeError = string.Empty;
+    private double hoverRating = 0;
+    private double selectedRating = 0;
+    private List<RatingDTO> ratings = new();
+    private double promedioRating = 0;
+    private string? usuarioId;
+
+    private void VolverARecetas() => navigation.NavigateTo("recetas");
+    private void IrAEditar() => navigation.NavigateTo($"recetas/editar/{Id}");
+
+    protected override async Task OnInitializedAsync()
+    {
+        var tareaReceta = recetaService.ObtenerPorId(Id);
+        var tareaComentarios = comentarioService.ObtenerPorReceta(Id);
+        var tareaCategorias = categoriaService.ObtenerTodas();
+        var tareaIngredientes = ingredienteService.ObtenerTodos();
+        var tareaRatings = ratingService.ObtenerPorReceta(Id);
+        var tareaAuth = authStateProvider.GetAuthenticationStateAsync();
+
+        await Task.WhenAll(tareaReceta, tareaComentarios, tareaCategorias, tareaIngredientes, tareaRatings, tareaAuth);
+
+        receta = tareaReceta.Result;
+        comentarios = tareaComentarios.Result;
+        categorias = tareaCategorias.Result;
+        ingredientes = tareaIngredientes.Result;
+        ratings = tareaRatings.Result;
+
+        var user = tareaAuth.Result.User;
+        if (user.Identity?.IsAuthenticated == true)
+        {
+            usuarioId = user.FindFirst(ClaimTypes.NameIdentifier)?.Value ?? user.FindFirst("sub")?.Value;
+        }
+
+        ActualizarPromedioRating();
+        AplicarRatingUsuario();
+
+        if (receta == null)
+        {
+            navigation.NavigateTo("recetas");
+        }
+    }
+
+    private async Task HandleKeyDown(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter" && !string.IsNullOrWhiteSpace(nuevoComentario))
+        {
+            await CrearComentario();
+        }
+    }
+
+    private async Task CrearComentario()
+    {
+        if (string.IsNullOrWhiteSpace(nuevoComentario)) return;
+
+        enviandoComentario = true;
+
+        var dto = new ComentarioCreacionDto
+        {
+            Contenido = nuevoComentario.Trim(),
+            RecetaId = Id
+        };
+
+        var resultado = await comentarioService.Crear(dto);
+
+        if (resultado != null)
+        {
+            nuevoComentario = "";
+            comentarios = await comentarioService.ObtenerPorReceta(Id);
+        }
+        else
+        {
+            mensajeError = "No se pudo agregar el comentario";
+        }
+
+        enviandoComentario = false;
+    }
+
+    private async Task EliminarComentario(int comentarioId)
+    {
+        if (!await JSRuntime.InvokeAsync<bool>("confirm", "¿Eliminar este comentario?"))
+            return;
+
+        var resultado = await comentarioService.Eliminar(comentarioId);
+
+        if (resultado)
+        {
+            comentarios = await comentarioService.ObtenerPorReceta(Id);
+        }
+        else
+        {
+            mensajeError = "No se pudo eliminar el comentario";
+        }
+    }
+
+    private async Task EliminarReceta()
+    {
+        if (!await JSRuntime.InvokeAsync<bool>("confirm", "¿Estás seguro de eliminar esta receta? Esta acción no se puede deshacer."))
+            return;
+
+        var resultado = await recetaService.Eliminar(Id);
+
+        if (resultado)
+        {
+            navigation.NavigateTo("recetas");
+        }
+        else
+        {
+            mensajeError = "No se pudo eliminar la receta";
+        }
+    }
+
+    private double CurrentRating => hoverRating > 0 ? hoverRating : selectedRating;
+
+    private string GetStarIcon(int starIndex)
+    {
+        var rating = CurrentRating;
+
+        if (rating >= starIndex)
+        {
+            return "bi-star-fill";
+        }
+
+        if (rating >= starIndex - 0.5)
+        {
+            return "bi-star-half";
+        }
+
+        return "bi-star";
+    }
+
+    private double GetAverageStarFillPercent(int starIndex)
+    {
+        var fill = Math.Clamp(promedioRating - (starIndex - 1), 0, 1);
+        return Math.Round(fill * 100, 0);
+    }
+
+    private string GetAverageStarClipId(int starIndex)
+        => $"avg-star-{Id}-{starIndex}";
+
+    private const double HalfStarThresholdPx = 10;
+
+    private void SetHoverRating(int starIndex, MouseEventArgs e)
+        => hoverRating = CalcularRating(starIndex, e);
+    private void ClearHoverRating() => hoverRating = 0;
+
+    private void SetSelectedRating(int starIndex, MouseEventArgs e)
+        => selectedRating = CalcularRating(starIndex, e);
+
+    private static double CalcularRating(int starIndex, MouseEventArgs e)
+    {
+        var half = e.OffsetX <= HalfStarThresholdPx ? 0.5 : 1.0;
+        return starIndex - 1 + half;
+    }
+
+    private void ActualizarPromedioRating()
+    {
+        promedioRating = ratings.Any() ? ratings.Average(r => r.Estrellas) : 0;
+    }
+
+    private void AplicarRatingUsuario()
+    {
+        if (string.IsNullOrWhiteSpace(usuarioId))
+        {
+            return;
+        }
+
+        var ratingUsuario = ratings.FirstOrDefault(r => r.UsuarioId == usuarioId);
+        if (ratingUsuario != null)
+        {
+            selectedRating = ratingUsuario.Estrellas;
+        }
+    }
+
+    private async Task EnviarCalificacion()
+    {
+        if (string.IsNullOrWhiteSpace(usuarioId) || selectedRating <= 0)
+        {
+            return;
+        }
+
+        enviandoRating = true;
+        mensajeError = string.Empty;
+
+        var dto = new RatingCreacionDTO
+        {
+            RecetaId = Id,
+            UsuarioId = usuarioId,
+            Estrellas = (float)selectedRating
+        };
+
+        var usuarioYaCalifico = ratings.Any(r => r.UsuarioId == usuarioId);
+        RatingDTO? resultado = usuarioYaCalifico
+            ? await ratingService.Actualizar(dto)
+            : await ratingService.Crear(dto);
+
+        if (resultado != null)
+        {
+            ratings = await ratingService.ObtenerPorReceta(Id);
+            selectedRating = resultado.Estrellas;
+            ActualizarPromedioRating();
+        }
+        else
+        {
+            mensajeError = "No se pudo enviar la calificación";
+        }
+
+        enviandoRating = false;
+    }
+}
